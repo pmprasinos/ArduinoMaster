@@ -60,9 +60,9 @@ void setup() {
 
   Wire.begin();
   Wire.beginTransmission(1);
-  //Serial.begin(9600);
+  Serial.begin(9600);
   bluetooth.begin(19200);
-  //Serial.println(loopcount);
+  Serial.println(loopcount);
   pinMode(Sync, INPUT);
   pinMode(Deadman, INPUT);
   pinMode(Zaxis, INPUT);
@@ -86,65 +86,65 @@ void loop() {
   }
 
 
-  
-    bluetoothread = bluetooth.read();
-   // if(bluetoothread != -1) Serial.println(bluetoothread);
+  bluetooth.listen()
+  bluetoothread = bluetooth.read();
+  if (bluetoothread < 100) bluetoothread = bluetooth.read();
 
-    ////Serial.println(loopcount);
+  ////Serial.println(loopcount);
 
-    if (bluetoothread != -1) {
-      btcount = 0;
-    }
-    if (bluetoothread == -1) 
+  if (bluetoothread != -1) {
+    btcount = 0;
+  }
+  if (bluetoothread == -1)
+  {
+    btcount ++;
+
+    if (btcount == 100 )
     {
-      btcount ++;
-
-      if (btcount == 100 ) 
-      {
-
-        Wire.write('H');
-        CurrentScreenState = 'H';
-      }
+      Wire.beginTransmission(1);
+      Wire.write('H');
+      CurrentScreenState = 'H';
     }
+  }
 
-    if (bluetoothread != previousbtc && bluetoothread < 100 || bluetoothread == -1  ) 
-    {
-      previousbtc = bluetoothread;
+  if (bluetoothread != previousbtc && bluetoothread < 100 || bluetoothread == -1  )
+  {
+    previousbtc = bluetoothread;
+    screencount = 0;
+  }
+  if (bluetoothread == previousbtc && bluetoothread < 100 && bluetoothread > -1 )
+  {
+    // Serial.println(bluetoothread);
+    previousbtc = bluetoothread;
+    screencount ++;
+  }
+
+
+  if (screencount == 3 && bluetoothread < 100)
+  {
+
+    if (bluetoothread == ppbtc) {
       screencount = 0;
-    }
-    if (bluetoothread == previousbtc && bluetoothread < 100 && bluetoothread > -1 ) 
-    {
-     // Serial.println(bluetoothread);
-      previousbtc = bluetoothread;
-      screencount ++;
-    }
+    } else {
 
+      int btc = bluetoothread;
+      Serial.println(bluetoothread);
+      Wire.beginTransmission(1);
+      Wire.write(btc);
 
-    if (screencount == 3 && bluetoothread < 100) 
-    {
-
-      if (bluetoothread == ppbtc) {
-        screencount = 0;
-      } else {
-
-        int btc = bluetoothread;
-
-
-        Wire.write(btc);
-        
-        if (btc == 'E' || btc == 'F')
-        {} else {
-          CurrentScreenState = btc;
-        }
-
-        ppbtc = bluetoothread;
-        previousbtc = bluetoothread;
+      if (btc == 'E' || btc == 'F')
+      {} else {
+        CurrentScreenState = btc;
       }
 
-
+      ppbtc = bluetoothread;
+      previousbtc = bluetoothread;
     }
 
-  
+
+  }
+
+
 
   ////Serial.println(loopcount);
   //////////////////////Joy Stick Read/////////////////////////////
@@ -160,9 +160,9 @@ void loop() {
   char ZaxisState; //= digitalRead(Zaxis);
   char EstopState; //= digitalRead(Estop);
   char CountState;
-    int CheckVal; 
+  int CheckVal;
   CheckVal = digitalRead(Deadman);
-  
+
   if (CheckVal == 1) {
     DeadmanState = 'F';
   } else if (CheckVal == 0) {
@@ -180,7 +180,7 @@ void loop() {
   } else if (CheckVal == 0) {
     EstopState = 'F';
   }
-   if (count == 1) {
+  if (count == 1) {
     CountState = 'N';
   } else if (count == 0) {
     CountState = 'F';
@@ -195,14 +195,14 @@ void loop() {
   ////Serial.println(loopcount);
   ///////////////////////////////////////PrintValues/////////////////////
 
-
+  Wire.endTransmission();
 
   String packet = String("V" + vertical + "v" + "H" + horizontal + "h" + "Z" + ZaxisState + "z" + "D" + DeadmanState + "d" + "E" + EstopState + "e" + "C" + CountState + "c" + "J" + controllername + "j" + "S" + CurrentScreenState + "s");
   bluetooth.println(packet);
 
-   Wire.endTransmission();
 
-        Wire.beginTransmission(1);
+
+
 
 }
 
