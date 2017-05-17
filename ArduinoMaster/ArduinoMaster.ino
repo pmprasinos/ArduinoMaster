@@ -35,6 +35,9 @@ int hMaxValueCalib = 900; int hMinValueCalib = 100;//put initial calibration val
 int vMaxValueCalib = 900; int vMinValueCalib = 100;
 
 
+int lastSendSum = 0;
+int ButtonState = 0;
+
 int battVolts;   // made global for wider avaliblity throughout a sketch if needed, example a low voltage alarm, etc
 int DeadmanState = 0;
 int SyncState = 0 ;
@@ -46,161 +49,192 @@ int previousbtc = 0; //Previous bluetooth command
 int btTryCount = 1001; //This increases when nothing is sent to the contoller and resets when a command is recieved. Used to test connection.
 int CurrentScreenState = 0;
 int btc;
-int loopcount=0;
+int loopcount = 0;
 
 
-bool debug = true;
+bool debug = false;
 void setup() {
- 
+
   Wire.begin();
-  Wire.beginTransmission(1);
-  if (debug)Serial.begin(9600);
-  bluetooth.begin(19200);
+  //Wire.beginTransmission(1);
+  if(debug) Serial.begin(9600);
+
+  bluetooth.begin(9600);
   pinMode(Sync, INPUT);
   pinMode(Deadman, INPUT);
   pinMode(Zaxis, INPUT);
   pinMode(Estop, INPUT);
   pinMode(indicatorled, OUTPUT);
-    delay (3000);
+  delay (3000);
   //  CurrentScreenState = bluetooth.read();
-  //bluetooth.listen();
+
 }
 
 void loop() {
-loopcount ++;
-if(loopcount %100 == 5) Serial.println(loopcount);
-  bluetooth.listen();
-  btc = bluetooth.read();
+  loopcount ++;
 
-  if (btc == -1)
-  {
-    if (btTryCount < 10000) btTryCount ++;
-  }
-  else
-  {
-      
-    btTryCount = 0;
-  }
-
-  if (btTryCount == 10000 )
-  {
-    if (debug)Serial.println(btc);
-    Wire.write(72);
-    btTryCount ++;
-   }
+  if (bluetooth.available() >= 1 ) {
+    // read the incoming byte:
+    btc = bluetooth.read();
+    bluetooth.write(btc);
 
 
-if (btc != previousbtc && btc > 47 && btc < 100 ) //if the character has changed store it to check for doubles on next loop
-{
-     previousbtc = btc; 
-}
-else if (btc == previousbtc && btc < 100 && btc > 47) //if the same character is read twice, and it is between 2 and 100
-{ 
-   
-    if( (btc == 69 || btc == 70))
+
+    if (btc == -1)
     {
-        if (ShapeStateDeadMan != btc) {Wire.write(btc); if (debug)Serial.print("DEADMAN: "); if (debug)Serial.println(btc);}
-        ShapeStateDeadMan = btc;  //for smaller objects like Estop, and interlocks
+      if (btTryCount < 10000) btTryCount ++;
     }
-    else if ( (btc < 69 && btc >  64))
+    else
     {
-        if (ShapeStatePin != btc) {Wire.write(btc); if (debug)Serial.print("    PIN: "); if (debug)Serial.println(btc);}
-        ShapeStatePin = btc;  //for smaller objects like Estop, and interlocks
+      if (debug)Serial.write(btc);
+      if (debug)Serial.println(btc);
+      btTryCount = 0;
     }
-    else if ( (btc > 49 && btc <73 ) && (btc <55 || btc > 65))
+
+    if (btTryCount == 10000 )
     {
-        //if (debug)Serial.println(btc);
-        if(CurrentScreenState != btc) 
-        { 
-            Wire.write(btc); 
-            if(debug)Serial.println(btc);
-            CurrentScreenState = btc; 
-            if(debug)Serial.print("CURRENT SCREEN: ");
-            if(debug)Serial.println(CurrentScreenState);
-        }
-          
-     }
+      if (debug)Serial.println(btc);
+      Wire.beginTransmission(1);
+      Wire.write(72);
+      Wire.endTransmission();
+      return;
+      btTryCount ++;
+    }
+
+
+    if (btc != previousbtc && btc > 47 && btc < 100 ) //if the character has changed store it to check for doubles on next loop
+    {
+      previousbtc = btc;
+    }
+    else if (btc == previousbtc && btc < 100 && btc > 47) //if the same character is read twice, and it is between 2 and 100
+    {
+
+      if (btc == 69 || btc == 70)
+      {
+        if (ShapeStateDeadMan != btc) {
+
+             if (debug)Serial.print("DEADMAN: ");
+          if (debug)Serial.println(btc);
+          Wire.beginTransmission(1);
+          Wire.write(btc);
+          Wire.endTransmission();
+          ShapeStateDeadMan = btc;
+          return;
      
-      previousbtc = btc; 
-   
+        }
+        //for smaller objects like Estop, and interlocks
+      }
+      else if ( (btc < 69 && btc >  64))
+      {
+        if (ShapeStatePin != btc) {
+          if (debug)Serial.print("    PIN: ");
+          if (debug)Serial.println(btc);
+          Wire.beginTransmission(1);
+          Wire.write(btc);
+          Wire.endTransmission();
+          ShapeStatePin = btc;
+          return;
+          
+        }
+        //for smaller objects like Estop, and interlocks
+      }
+      else if ( (btc > 49 && btc < 73 ) && (btc < 57 || btc > 65))
+      {
+        //if (debug)Serial.println(btc);
+        if (CurrentScreenState != btc)
+        {
+          if (debug)Serial.println(btc);
+          CurrentScreenState = btc;
+          if (debug)Serial.print("CURRENT SCREEN: ");
+          if (debug)Serial.println(CurrentScreenState);
+          Wire.beginTransmission(1);
+          Wire.write(btc);
+          Wire.endTransmission();
+          return;
+
+        }
+        if (debug)Serial.print("BYTE READ: ");
+        if (debug) Serial.print(btc, DEC);
+        if (debug) Serial.write(" ");
+        if (debug) Serial.write(btc);
+        if (debug) Serial.println();
+      }
+
+      previousbtc = btc;
+
+    }
+  }
+
+  SendJSData();
+
 }
 
 
 
 
-////Serial.println(loopcount);
-//////////////////////Joy Stick Read/////////////////////////////
-String vertical, horizontal ;   // read all values from the joystick
-
-vertical = analogRead(VERT); // will be 0-1023
-horizontal = analogRead(HORIZ); // will be 0-1023
-
-//Adjust min & max for in line calibration
-if (vertical.toInt() < vMinValueCalib ) vMinValueCalib = vertical.toInt() + 1;
-if (vertical.toInt() > vMaxValueCalib) vMaxValueCalib = vertical.toInt() - 1;
-if (horizontal.toInt() < hMinValueCalib) hMinValueCalib = horizontal.toInt() + 1;
-if (horizontal.toInt() > hMaxValueCalib) hMaxValueCalib = horizontal.toInt() - 1;
-
-if ( false && loopcount % 40 ==5  )
+void SendJSData()
 {
-  Serial.print("hMIN: " );  Serial.print(hMinValueCalib );  Serial.print("   hMAX: " );  Serial.print( hMaxValueCalib);  Serial.print("   hRAW:" + horizontal);
-  Serial.print("    vMIN: " );  Serial.print(vMinValueCalib );  Serial.print("   vMAX: " );  Serial.print( vMaxValueCalib);  Serial.println("   vRAW:" + vertical);
+
+  int vertical, horizontal ;   // read all values from the joystick
+
+  vertical = analogRead(VERT); // will be 0-1023
+  horizontal = analogRead(HORIZ); // will be 0-1023
+
+  //Adjust min & max for in line calibration. Values offset by one to prevent overcorrection in single loop
+  if (vertical < vMinValueCalib ) vMinValueCalib = vertical + 1;
+  if (vertical > vMaxValueCalib) vMaxValueCalib = vertical - 1;
+  if (horizontal < hMinValueCalib) hMinValueCalib = horizontal + 1;
+  if (horizontal > hMaxValueCalib) hMaxValueCalib = horizontal - 1;
+
+
+  vertical = map (vertical, vMinValueCalib, vMaxValueCalib, 14, 255)  ; // will result in 14-255
+  horizontal = map(horizontal, hMinValueCalib, hMaxValueCalib, 14, 255) ; // will result in 14-255
+
+
+  ///////////////////////////////////////Make Packet/////////////////////
+  //////////////////////////Packet will consist of 4 bytes [vertical, horizontal, ButtonState, Screen] with one checkbit included in
+  //CurrentScreenState = 72;
+
+
+  ButtonState = digitalRead(Deadman) * 4 +
+                digitalRead(Estop) * 8 +
+                digitalRead(Zaxis) * 16 +
+                digitalRead(Sync) * 32;
+
+
+
+  byte ScreenChar = (byte)CurrentScreenState ;
+  byte VertChar = (byte)vertical;
+  byte HorizChar = (byte)horizontal;
+
+  int checkval =  VertChar + HorizChar + ButtonState + ScreenChar;
+
+  int  ParityBit =  checkval % 2; //will result in 0 for odd and 1 for even values. Used for error checking at reciever
+  ButtonState = ButtonState + ( ParityBit) ;
+  byte ButtonChar = (byte)ButtonState ;
+
+
+
+  if (abs(lastSendSum -( ButtonState + vertical + horizontal + CurrentScreenState)) > 2 || loopcount > 40 )
+  {
+    if(debug) Serial.println(lastSendSum);
+    if(debug) Serial.println(loopcount);
+    if(loopcount == 40) loopcount++;
+    if(loopcount == 41) loopcount = 0;
+    lastSendSum = ButtonState + vertical + horizontal + CurrentScreenState;
+
+    byte PacketChar[] = {VertChar, HorizChar, ButtonChar, ScreenChar};
+    bluetooth.write(PacketChar[0]);
+    bluetooth.write(PacketChar[1]);
+    bluetooth.write(PacketChar[2]);
+    bluetooth.write(PacketChar[3]);
+    bluetooth.println();
+    delay(4);
+  } else{
+    delay(6);
+  }
+
 }
-
-
-vertical = (map (vertical.toInt(), vMinValueCalib, vMaxValueCalib, 1, 1023) ) + 10000; // will be 10-1010
-horizontal = (map(horizontal.toInt(), hMinValueCalib, hMaxValueCalib, 1, 1023)+ 10000 )  ; // will be 10-1010
-
-
-///////////////////// Button State Read////////////////////////
-char DeadmanState = '0'; //= digitalRead(Deadman);
-char ZaxisState= '0'; //= digitalRead(Zaxis);
-char EstopState= '0'; //= digitalRead(Estop);
-char CountState= '0';
-int CheckVal;
-
-CheckVal = digitalRead(Deadman);
-if (CheckVal == 1) {
-  DeadmanState = 'F';
-} else if (CheckVal == 0) {
-  DeadmanState = 'N';
-}
-CheckVal = digitalRead(Zaxis);
-if (CheckVal == 1) {
-  ZaxisState = 'F';
-} else if (CheckVal == 0) {
-  ZaxisState = 'N';
-}
-CheckVal = digitalRead(Estop);
-if (CheckVal == 1) {
-  EstopState = 'N';
-} else if (CheckVal == 0) {
-  EstopState = 'F';
-}
- if(CountState == 'N') CountState = 'F';
- else CountState = 'N';
-
-///////////////////////////////////////PrintValues/////////////////////
-//CurrentScreenState = 72;
-char CurrentScreenChar = (char)CurrentScreenState + '0';
-
-String CurrentScreenString = String(CurrentScreenChar);
-CurrentScreenString.toUpperCase();
-
-Serial.print(CurrentScreenState);
-Serial.print(CurrentScreenChar);
-
-String packet = String("V" + vertical + "v" + "H" + horizontal + "h" + "Z" + ZaxisState + "z" + "D" + DeadmanState + "d" + "E" + EstopState + "e" + "C" + CountState + "c" + "J" + controllername + "j" + "S" + CurrentScreenString + "s");
-bluetooth.println(packet);
-
-
-Wire.endTransmission();
-if(debug)Serial.println(packet);
-Wire.beginTransmission(1);
-
-
-}
-
 
 ////////////////////////////////////END OF LOOP////////////////////////////////
 
