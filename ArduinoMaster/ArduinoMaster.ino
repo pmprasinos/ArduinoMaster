@@ -31,8 +31,8 @@ int ShapeStateDeadMan = 0;  //for smaller objects like Estop, and interlocks
 int ShapeStatePin = 0;
 int ShapeStateCarrier = 0;
 
-int hMaxValueCalib = 900; int hMinValueCalib = 100;//put initial calibration values inside expected range of 0-1024
-int vMaxValueCalib = 900; int vMinValueCalib = 100;
+int hMaxValueCalib = 800; int hMinValueCalib = 200; int hTrim = 0;//put initial calibration values inside expected range of 0-1024, with centers at 0
+int vMaxValueCalib = 800; int vMinValueCalib = 200; int vTrim = 0;
 
 
 int lastSendSum = 0;
@@ -46,26 +46,34 @@ int EstopState = 0;
 
 int previousbtc = 0; //Previous bluetooth command
 
-int btTryCount = 1001; //This increases when nothing is sent to the contoller and resets when a command is recieved. Used to test connection.
+long btTimeLast = 10000;
+
+int btTryCount = 999; //This increases when nothing is sent to the contoller and resets when a command is recieved. Used to test connection.
 int CurrentScreenState = 0;
 int btc;
-int loopcount = 0;
+int loopcount = 0; int calibCount = 0;
 
 
-bool debug = false;
+bool debug = true;
 void setup() {
 
   Wire.begin();
   //Wire.beginTransmission(1);
-  if(debug) Serial.begin(9600);
-
+  if (debug) Serial.begin(9600);
   bluetooth.begin(9600);
   pinMode(Sync, INPUT);
   pinMode(Deadman, INPUT);
   pinMode(Zaxis, INPUT);
   pinMode(Estop, INPUT);
   pinMode(indicatorled, OUTPUT);
-  delay (3000);
+    delay (3000);
+  vTrim = 512 - analogRead(VERT) ;
+  hTrim = 512 - analogRead(HORIZ) ;
+  if(vTrim > 50) vTrim = 50;
+  if(vTrim < -50) vTrim = -50;
+    if(hTrim > 50) hTrim = 50;
+  if(hTrim < -50) hTrim = -50;
+
   //  CurrentScreenState = bluetooth.read();
 
 }
@@ -73,34 +81,11 @@ void setup() {
 void loop() {
   loopcount ++;
 
-  if (bluetooth.available() >= 1 ) {
+  if (bluetooth.available() >= 1 )
+  {
     // read the incoming byte:
     btc = bluetooth.read();
-    bluetooth.write(btc);
-
-
-
-    if (btc == -1)
-    {
-      if (btTryCount < 10000) btTryCount ++;
-    }
-    else
-    {
-      if (debug)Serial.write(btc);
-      if (debug)Serial.println(btc);
-      btTryCount = 0;
-    }
-
-    if (btTryCount == 10000 )
-    {
-      if (debug)Serial.println(btc);
-      Wire.beginTransmission(1);
-      Wire.write(72);
-      Wire.endTransmission();
-      return;
-      btTryCount ++;
-    }
-
+   // bluetooth.write(btc);
 
     if (btc != previousbtc && btc > 47 && btc < 100 ) //if the character has changed store it to check for doubles on next loop
     {
@@ -111,18 +96,15 @@ void loop() {
 
       if (btc == 69 || btc == 70)
       {
-        if (ShapeStateDeadMan != btc) {
-
-             if (debug)Serial.print("DEADMAN: ");
+        if (ShapeStateDeadMan != btc) {         //for smaller objects like Estop, and interlocks
+          if (debug)Serial.print("DEADMAN: ");
           if (debug)Serial.println(btc);
           Wire.beginTransmission(1);
           Wire.write(btc);
           Wire.endTransmission();
           ShapeStateDeadMan = btc;
-          return;
-     
         }
-        //for smaller objects like Estop, and interlocks
+
       }
       else if ( (btc < 69 && btc >  64))
       {
@@ -133,8 +115,6 @@ void loop() {
           Wire.write(btc);
           Wire.endTransmission();
           ShapeStatePin = btc;
-          return;
-          
         }
         //for smaller objects like Estop, and interlocks
       }
@@ -150,17 +130,32 @@ void loop() {
           Wire.beginTransmission(1);
           Wire.write(btc);
           Wire.endTransmission();
-          return;
-
         }
         if (debug)Serial.print("BYTE READ: ");
         if (debug) Serial.print(btc, DEC);
         if (debug) Serial.write(" ");
         if (debug) Serial.write(btc);
         if (debug) Serial.println();
+            
       }
 
       previousbtc = btc;
+btTimeLast = millis();
+    }
+    btTryCount = 0;
+
+  }
+  else
+  {
+    if(millis() - btTimeLast > 10000 & CurrentScreenState != 72)
+    {
+      if (debug)Serial.print("btTimeLast:");
+      if (debug)Serial.println(btTimeLast);
+      Wire.beginTransmission(1);
+      Wire.write(72);
+      Wire.endTransmission();
+      btTimeLast = millis();
+      CurrentScreenState = 72;
 
     }
   }
@@ -170,15 +165,15 @@ void loop() {
 }
 
 
-
-
 void SendJSData()
 {
 
   int vertical, horizontal ;   // read all values from the joystick
 
-  vertical = analogRead(VERT); // will be 0-1023
-  horizontal = analogRead(HORIZ); // will be 0-1023
+  vertical = analogRead(VERT) ; // will be 0-1023
+  horizontal = analogRead(HORIZ) ; // will be 0-1023
+
+
 
   //Adjust min & max for in line calibration. Values offset by one to prevent overcorrection in single loop
   if (vertical < vMinValueCalib ) vMinValueCalib = vertical + 1;
@@ -186,9 +181,59 @@ void SendJSData()
   if (horizontal < hMinValueCalib) hMinValueCalib = horizontal + 1;
   if (horizontal > hMaxValueCalib) hMaxValueCalib = horizontal - 1;
 
+  int deadState;
+  deadState = digitalRead(Deadman);
 
-  vertical = map (vertical, vMinValueCalib, vMaxValueCalib, 14, 255)  ; // will result in 14-255
-  horizontal = map(horizontal, hMinValueCalib, hMaxValueCalib, 14, 255) ; // will result in 14-255
+  if (loopcount % 40 == 5 && debug) {
+    Serial.print("VERT: ");
+    Serial.print(vertical  );
+    Serial.print("    ");
+    Serial.print(vMinValueCalib);
+    Serial.print("    ");
+    Serial.print(vMaxValueCalib);
+    Serial.print("    ");
+    Serial.print(vTrim);
+
+    Serial.print("HORIZ: ");
+    Serial.print( horizontal );
+    Serial.print("    ");
+    Serial.print(hMinValueCalib );
+    Serial.print("    ");
+    Serial.print(hMaxValueCalib);
+    Serial.print("    ");
+    Serial.print(hTrim);
+    Serial.println();
+  }
+
+
+  if (vertical + vTrim  >= 512)
+  {
+    if (calibCount == 2 && deadState == 1 && vTrim > -50) vTrim = vTrim - 1; //highly damped calibration for center point of joystick
+    vertical = map (vertical + vTrim,  512, vMaxValueCalib + vTrim, 150, 250)  ; // will result in 14-255
+  }
+  else
+  {
+    if (calibCount == 2 && deadState == 1 && vTrim < 50) vTrim = vTrim + 1;
+    vertical = map (vertical + vTrim, vMinValueCalib + vTrim, 511, 50, 150)  ; // will result in 14-255
+  }
+  
+  if (horizontal + hTrim  >= 512)
+  {
+    if (calibCount == 2 && deadState == 1 && hTrim > -50) hTrim = hTrim - 1;
+    horizontal = map (horizontal + hTrim,  512, hMaxValueCalib + hTrim, 150, 250)  ; // will result in 14-255
+  }
+  else
+  {
+    if (calibCount == 2 && deadState == 1 && hTrim < 50) hTrim = hTrim + 1;
+    horizontal = map (horizontal + hTrim, hMinValueCalib + hTrim, 511,  50, 150)  ; // will result in 14-255
+  }
+
+  
+
+ if(calibCount == 2) calibCount = 0; //calibCount is used for the damping for center calibration
+ 
+
+
 
 
   ///////////////////////////////////////Make Packet/////////////////////
@@ -196,7 +241,7 @@ void SendJSData()
   //CurrentScreenState = 72;
 
 
-  ButtonState = digitalRead(Deadman) * 4 +
+  ButtonState = deadState  * 4 +
                 digitalRead(Estop) * 8 +
                 digitalRead(Zaxis) * 16 +
                 digitalRead(Sync) * 32;
@@ -210,29 +255,39 @@ void SendJSData()
   int checkval =  VertChar + HorizChar + ButtonState + ScreenChar;
 
   int  ParityBit =  checkval % 2; //will result in 0 for odd and 1 for even values. Used for error checking at reciever
-  ButtonState = ButtonState + ( ParityBit) ;
+  ButtonState = ButtonState + ( 64 * ParityBit) ;
   byte ButtonChar = (byte)ButtonState ;
 
 
 
-  if (abs(lastSendSum -( ButtonState + vertical + horizontal + CurrentScreenState)) > 2 || loopcount > 40 )
-  {
-    if(debug) Serial.println(lastSendSum);
-    if(debug) Serial.println(loopcount);
-    if(loopcount == 40) loopcount++;
-    if(loopcount == 41) loopcount = 0;
-    lastSendSum = ButtonState + vertical + horizontal + CurrentScreenState;
+  if (abs(lastSendSum - ( ButtonState + vertical + horizontal + CurrentScreenState)) > 2 || loopcount >= 40 || (loopcount % 10 == 5 && deadState == 0)) //only send state every 10ms if a value has changed OR //send state twice if 40/41 cycles have passed OR  //send state every 10 cycles if Deadman is pressed
+  {         
+     if(deadState ==0) loopcount = 0;
+     
+    if (loopcount == 40)                                                                                                                              
+    {
+      loopcount = 0;
+      calibCount++;
+    }
 
+   
+    
+    lastSendSum = ButtonState + vertical + horizontal + CurrentScreenState;
     byte PacketChar[] = {VertChar, HorizChar, ButtonChar, ScreenChar};
     bluetooth.write(PacketChar[0]);
     bluetooth.write(PacketChar[1]);
     bluetooth.write(PacketChar[2]);
     bluetooth.write(PacketChar[3]);
     bluetooth.println();
-    delay(4);
-  } else{
-    delay(6);
+    delay(1); //refresh rate delay when value is changing
+
   }
+  else
+  {
+      delay(15); //determines cycle time for com status and Deadman updates
+  }
+
+
 
 }
 
