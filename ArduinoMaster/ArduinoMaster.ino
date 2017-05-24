@@ -31,8 +31,8 @@ int ShapeStateDeadMan = 0;  //for smaller objects like Estop, and interlocks
 int ShapeStatePin = 0;
 int ShapeStateCarrier = 0;
 
-int hMaxValueCalib = 800; int hMinValueCalib = 200; int hTrim = 0;//put initial calibration values inside expected range of 0-1024, with centers at 0
-int vMaxValueCalib = 800; int vMinValueCalib = 200; int vTrim = 0;
+long hMaxValueCalib = 824; long hMinValueCalib = 200; long hTrim = 0;//put initial calibration values inside expected range of 0-1024, with centers at 0
+long vMaxValueCalib = 824; long vMinValueCalib = 200; long vTrim = 0;
 
 
 int lastSendSum = 0;
@@ -168,12 +168,28 @@ btTimeLast = millis();
 void SendJSData()
 {
 
-  int vertical, horizontal ;   // read all values from the joystick
+  long vertical, horizontal ;   // read all values from the joystick
 
   vertical = analogRead(VERT) ; // will be 0-1023
   horizontal = analogRead(HORIZ) ; // will be 0-1023
 
+  if (vertical >= 512 )
+  {
+  //  vertical = (512L * 512L) + ((vertical - 512L)*(vertical - 512L)/512L);
+  }
+  else
+  {
+    
+  }
 
+   if (horizontal >= 512 )
+  {
+    horizontal = 512L + ((horizontal - 512L)*(horizontal - 512L)/512L);
+  }
+  else
+  {
+   
+  }
 
   //Adjust min & max for in line calibration. Values offset by one to prevent overcorrection in single loop
   if (vertical < vMinValueCalib ) vMinValueCalib = vertical + 1;
@@ -184,7 +200,7 @@ void SendJSData()
   int deadState;
   deadState = digitalRead(Deadman);
 
-  if (loopcount % 40 == 5 && debug) {
+  if (loopcount % 40 == 35 && debug) {
     Serial.print("VERT: ");
     Serial.print(vertical  );
     Serial.print("    ");
@@ -206,32 +222,41 @@ void SendJSData()
   }
 
 
-  if (vertical + vTrim  >= 512)
+  if (vertical + vTrim  >= 512L)
   {
-    if (calibCount == 2 && deadState == 1 && vTrim > -50) vTrim = vTrim - 1; //highly damped calibration for center point of joystick
-    vertical = map (vertical + vTrim,  512, vMaxValueCalib + vTrim, 150, 250)  ; // will result in 14-255
+    if (calibCount == 2 && deadState == 1 && vTrim > -50l) vTrim = vTrim - 1; //highly damped calibration for center point of joystick
+   // vertical = (512L  + ((vertical + vTrim - 512L )*(vertical + vTrim - 512L )/512L ) * (1024L/ vMaxValueCalib));
+     vertical =(512L - (vertical+ vTrim)) * (512L - (vertical+ vTrim));
+    vertical = map ( vertical,  0L, (511L-(vMaxValueCalib + vTrim)) * (511L-(vMaxValueCalib + vTrim)), 150L, 255L)  ; // will result in 14-255
   }
   else
   {
-    if (calibCount == 2 && deadState == 1 && vTrim < 50) vTrim = vTrim + 1;
-    vertical = map (vertical + vTrim, vMinValueCalib + vTrim, 511, 50, 150)  ; // will result in 14-255
-  }
-  
-  if (horizontal + hTrim  >= 512)
-  {
-    if (calibCount == 2 && deadState == 1 && hTrim > -50) hTrim = hTrim - 1;
-    horizontal = map (horizontal + hTrim,  512, hMaxValueCalib + hTrim, 150, 250)  ; // will result in 14-255
-  }
-  else
-  {
-    if (calibCount == 2 && deadState == 1 && hTrim < 50) hTrim = hTrim + 1;
-    horizontal = map (horizontal + hTrim, hMinValueCalib + hTrim, 511,  50, 150)  ; // will result in 14-255
+    if (calibCount == 2 && deadState == 1 && vTrim < 50l) vTrim = vTrim + 1;
+    
+    vertical =(511L - (vertical+ vTrim)) * (511L - (vertical+ vTrim));
+    vertical = map (vertical , (511L-(vMinValueCalib + vTrim)) * (511L-(vMinValueCalib + vTrim)), 0L, 40L, 150L)  ; // will result in 14-255
   }
 
-  
+  if (horizontal + hTrim  >= 512L)
+  {
+    if (calibCount == 2 && deadState == 1 && hTrim > -50l) hTrim = hTrim - 1;
+     horizontal =(512L - (horizontal+ hTrim)) * (512L - (horizontal+ hTrim));
+    horizontal = map (horizontal ,  0L, (511L -(hMaxValueCalib + hTrim))*(511L -(hMaxValueCalib + hTrim)), 150L, 255L)  ; // will result in 14-255
+  }
+  else
+  {
+    if (calibCount == 2 && deadState == 1 && hTrim < 50l) hTrim = hTrim + 1;
+      horizontal = (511L - (horizontal+ hTrim)) * (511L - (horizontal+ hTrim));
+    horizontal = map (horizontal , (511L-(hMinValueCalib + hTrim))* (511L-(hMinValueCalib + hTrim)), 0L,  40L, 150L)  ; // will result in 14-255
+  }
+     
 
  if(calibCount == 2) calibCount = 0; //calibCount is used for the damping for center calibration
- 
+
+ if(horizontal > 250) horizontal = 250;
+ if(horizontal < 50) horizontal = 50;
+ if(vertical > 250) vertical = 250;
+ if(vertical < 50) vertical = 50;
 
 
 
