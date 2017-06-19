@@ -17,12 +17,15 @@ SoftwareSerial bluetooth(bluetoothTx, bluetoothRx);
 
 #define VERT  A6 // analog SHOULD BE A4
 #define HORIZ  A7 // analog
+#define AccelX  A1
+#define AccelY  A2
+#define AccelZ  A3
+
 
 #define Deadman  4
 #define Estop  5
 #define Zaxis  6
 #define Sync  7
-#define AccelZ  A3
 
 
 int indicatorled = 13;
@@ -54,7 +57,7 @@ int btc;
 int loopcount = 0; int calibCount = 0;
 
 
-bool debug = true;
+bool debug = false;
 void setup() {
 
   Wire.begin();
@@ -66,6 +69,10 @@ void setup() {
   pinMode(Zaxis, INPUT);
   pinMode(Estop, INPUT);
   pinMode(indicatorled, OUTPUT);
+   pinMode(AccelX, INPUT);
+    pinMode(AccelY, INPUT);
+   pinMode(AccelZ, INPUT);
+   
     delay (3000);
   vTrim = 512 - analogRead(VERT) ;
   hTrim = 512 - analogRead(HORIZ) ;
@@ -118,7 +125,7 @@ void loop() {
         }
         //for smaller objects like Estop, and interlocks
       }
-      else if ( (btc > 49 && btc < 73 ) && (btc < 57 || btc > 65))
+      else if ( (btc > 49 && btc < 80 ) && (btc < 57 || btc > 65))
       {
         //if (debug)Serial.println(btc);
         if (CurrentScreenState != btc)
@@ -127,10 +134,14 @@ void loop() {
           CurrentScreenState = btc;
           if (debug)Serial.print("CURRENT SCREEN: ");
           if (debug)Serial.println(CurrentScreenState);
-          Wire.beginTransmission(1);
-          Wire.write(btc);
-          Wire.endTransmission();
+          
+
+       
         }
+                   Wire.beginTransmission(1);
+                    Wire.write(CurrentScreenState);
+                     Wire.endTransmission();
+                     
         if (debug)Serial.print("BYTE READ: ");
         if (debug) Serial.print(btc, DEC);
         if (debug) Serial.write(" ");
@@ -169,7 +180,7 @@ void SendJSData()
 {
 
   long vertical, horizontal ;   // read all values from the joystick
-
+  if(debug) Serial.print(analogRead(AccelZ));
   vertical = analogRead(VERT) ; // will be 0-1023
   horizontal = analogRead(HORIZ) ; // will be 0-1023
 
@@ -304,12 +315,12 @@ void SendJSData()
     bluetooth.write(PacketChar[2]);
     bluetooth.write(PacketChar[3]);
     bluetooth.println();
-    delay(1); //refresh rate delay when value is changing
+    delay(5); //refresh rate delay when value is changing
 
   }
   else
   {
-      delay(15); //determines cycle time for com status and Deadman updates
+      delay(1); //determines cycle time for com status and Deadman updates
   }
 
 
