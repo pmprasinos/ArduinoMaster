@@ -1,0 +1,64 @@
+
+#include <SD.h>
+#include <SPI.h>
+#include <Wire.h>
+
+///////////////////Inputs//////////////////////////
+
+
+static const uint8_t JoyStick[4][3] =  {{A0 , A1, A2}, {A6 , A7 , 8}, {A3 , A4 , A5},       {9, 10, 11}}  ; // [JoystickNumber][x, y, z]
+static const uint8_t Buttons[3][8] = {{15, 16, 17, 18, 19, 20, 23, 22}, {2, 3, 4, 5, 6, 7, 8, 9}, { 10, 11, 12, 13, 14, 44, 45, 46}};
+long iv1 = 970;
+long MaxValueCalib[4][3] = {{iv1, iv1, iv1}, {iv1, iv1, iv1}, {iv1, iv1, iv1}, {iv1, iv1, iv1}}; //x y and z
+long iv2 = 50;                             
+long MinValueCalib[4][3] = {{iv2, iv2, iv2}, {iv2, iv2, iv2}, {iv2, iv2, iv2}, {iv2, iv2, iv2}};
+long iv3 = 0;                 
+long Trim[4][3] = {{iv3, iv3, iv3}, {iv3, iv3, iv3}, {iv3, iv3, iv3}, {iv3, iv3, iv3}};
+
+int loopcount = 0; int calibCount = 0;
+bool debug = false;
+float Brightness = 0; float adj = 0.09;
+
+void setup() {
+  Serial.begin(38400);
+     for (int i = 0; i <= sizeof(Buttons)/3;  i++)
+  {
+        analogWrite(Buttons[1][i], 254 );
+  }
+  delay(1000);
+ for (int i = 0; i <= sizeof(Buttons)/3;  i++)
+  {
+   
+      pinMode(Buttons[0][i], INPUT);
+      if(Buttons[1][i]!=0) pinMode(Buttons[1][i], OUTPUT);
+      if(Buttons[2][i]!=0)   pinMode(Buttons[2][i], OUTPUT);
+  }
+}
+
+void loop()
+{
+        if(Brightness > 244 || Brightness < 0) adj = -adj;
+ if(abs(Brightness) < 80) Brightness = Brightness +(adj/2); else Brightness = Brightness +adj;
+ 
+ if((int)(Brightness + 10)>254) Brightness = 0;
+     // 
+
+  for (int i = 0; i <= sizeof(Buttons)/3;  i++)
+  {
+        analogWrite(Buttons[1][i], (int)(Brightness + 10));
+  }
+  loopcount ++;
+    if (loopcount == 40)
+    {
+      loopcount = 0;
+      calibCount++;
+      if (calibCount == 10) calibCount = 0; //calibCount is used for the damping for center calibration
+       for (int js = 0; js <= 3;  js++){SendJSData(js);delay(1);}
+      SendButtonData();
+    }
+ 
+}
+
+
+
+
